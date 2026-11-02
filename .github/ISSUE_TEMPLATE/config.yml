@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: User guide
+    url: https://github.com/mtauber-dev/ScreenRec/wiki
+    about: How to record, make videos and guides, and change settings.
+  - name: Questions and ideas
+    url: https://github.com/mtauber-dev/ScreenRec/discussions
+    about: Ask how to do something, or talk through an idea before filing it.

@@ -1,0 +1,42 @@
+name: Feature request
+description: An idea to make ScreenRec more useful
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you're trying to do
+      description: The situation, not the solution. What's hard or missing today?
+      placeholder: When I make a guide for my team, I have to…
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How you'd like it to work.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      options:
+        - Recording
+        - Video
+        - Document (guide)
+        - Review window
+        - WhatsApp
+        - Settings
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do now instead
+    validations:
+      required: false

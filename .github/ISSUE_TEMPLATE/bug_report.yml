@@ -1,0 +1,93 @@
+name: Bug report
+description: Something doesn't work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please check [Troubleshooting](https://github.com/mtauber-dev/ScreenRec/wiki/Troubleshooting) first.
+
+        **Privacy:** recordings, screenshots and `events.json` can contain what was on your screen, page
+        addresses and the names of things you clicked. Don't attach them unless you've checked them.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, and what went wrong.
+      placeholder: I recorded an area with Ctrl+Alt+R, pressed Finish, and the review window showed "Failed"…
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to make it happen again
+      placeholder: |
+        1. Tray menu → Record an area…
+        2. …
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      options:
+        - Recording (hotkey, area, control bar, pause/restart)
+        - Video
+        - Document (guide)
+        - Review window
+        - WhatsApp message or sending
+        - Installing / starting
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you run ScreenRec
+      options:
+        - ScreenRec.exe (packaged)
+        - From source (python -m screenrec)
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: Win+R → `winver`
+      placeholder: Windows 11 23H2 / Windows 10 21H2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: writer
+    attributes:
+      label: Who writes documents (Settings)
+      description: Only if it's about documents or the WhatsApp message.
+      options:
+        - Not relevant
+        - Claude (Claude Code)
+        - Local model (Ollama)
+        - Neither is installed
+    validations:
+      required: false
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Error details
+      description: If making it failed, paste the contents of `error.txt` from the recording's folder (review window → Show in folder).
+      render: text
+    validations:
+      required: false
