@@ -36,8 +36,8 @@ DEFAULTS = {
     "keep_raw": True,
     "output": "video",                   # after recording, make: "video", "document" or "both"
     "guide_quotes": True,                # document: show what was said under each step
-    "guide_writer": "claude",            # document: "claude" (API key or Claude Code; sends transcript +
-                                         # screenshots to Anthropic) or "ollama" (stays on this PC)
+    "guide_writer": "claude",            # document: "claude" (Claude Code; sends transcript + screenshots
+                                         # to Anthropic) or "ollama" (stays on this PC)
     # "Send to WhatsApp" in the review window (opens Claude Code with the mcp-whatsapp plugin, where you
     # approve the send). null = copy by hand
     "whatsapp_chat_id": None,            # e.g. "1203630000000000@g.us"

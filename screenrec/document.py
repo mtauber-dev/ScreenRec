@@ -171,29 +171,6 @@ def _parse_json(reply):
     return json.loads(m.group(0))
 
 
-def _api_json(client, prompt, steps, gdir):
-    """Ask Claude through the API, with each step's screenshot attached (shrunk to save tokens)."""
-    import base64
-    content = [{"type": "text", "text": prompt}]
-    for i, s in enumerate(steps, 1):
-        if not s.get("image"):
-            continue
-        img = cv2.imread(str(gdir / s["image"]))
-        if img.shape[1] > 1280:
-            img = cv2.resize(img, (1280, int(img.shape[0] * 1280 / img.shape[1])), interpolation=cv2.INTER_AREA)
-        ok, jpg = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        content += [{"type": "text", "text": f"Screenshot for step {i}:"},
-                    {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
-                                                 "data": base64.standard_b64encode(jpg.tobytes()).decode()}}]
-    response = client.beta.messages.create(
-        model=claude_link.MODEL, max_tokens=16000, output_config={"effort": "medium"},
-        betas=["server-side-fallback-2026-07-01"], fallbacks="default",  # another model answers if one declines
-        messages=[{"role": "user", "content": content}])
-    if response.stop_reason == "refusal":
-        raise RuntimeError("Claude declined to write this guide")
-    return _parse_json("".join(b.text for b in response.content if b.type == "text"))
-
-
 def _claude_json(prompt, gdir):
     """Ask Claude Code (headless) for the guide. It may only read files: the screenshots."""
     claude = claude_link.claude_code()
@@ -209,20 +186,17 @@ def _claude_json(prompt, gdir):
 
 
 def interpret(cfg, intro, steps, gdir):
-    """Writer, best first: Claude via a connected API key, Claude Code, then the local Ollama model."""
-    want_claude = (cfg.guide_writer or "claude") == "claude"
-    client = claude_link.api_client() if want_claude else None
-    use_cli = want_claude and not client and claude_link.claude_code()
+    """Writer: Claude Code when chosen and installed, otherwise the local Ollama model."""
+    use_claude = (cfg.guide_writer or "claude") == "claude" and claude_link.claude_code()
     lines = "\n".join(
         f"{i}. Action: {_action(s)}. Said: \"{s['said'] or '(nothing)'}\""
-        + (f" Screenshot: {gdir / s['image']}" if use_cli and s.get("image") else "")
+        + (f" Screenshot: {gdir / s['image']}" if use_claude and s.get("image") else "")
         for i, s in enumerate(steps, 1))
-    where = "Open the screenshots with the Read tool" if use_cli else "Look at the screenshots attached below"
-    look = f"""
-Each screenshot was taken just before the action; a red circle marks where the click landed. {where}
-and use them to name exactly what was clicked or typed into (the button, link, tab, menu item or field
-label you can read there).
-""" if client or use_cli else ""
+    look = """
+Each screenshot was taken just before the action; a red circle marks where the click landed. Open the
+screenshots with the Read tool and use them to name exactly what was clicked or typed into (the
+button, link, tab, menu item or field label you can read there).
+""" if use_claude else ""
     # The narration goes in once, split over the steps: the whole transcript again doubles the time.
     prompt = f"""You turn a narrated screen recording into a written step-by-step guide.
 
@@ -247,13 +221,11 @@ Rules:
 - tips: warnings or useful remarks from the narration that are not steps. Empty list if none.
 - Never invent buttons, names or steps that the narration, window titles or screenshots don't support."""
     data = None
-    try:
-        if client:
-            data = _api_json(client, prompt, steps, gdir)
-        elif use_cli:
+    if use_claude:
+        try:
             data = _claude_json(prompt, gdir)
-    except Exception:
-        pass  # fall back to the local model
+        except Exception:
+            pass  # fall back to the local model
     if data is None:
         data = _ollama_json(cfg, prompt)
     texts = {int(s.get("n", 0)): s for s in data.get("steps", []) if isinstance(s, dict)}

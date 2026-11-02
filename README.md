@@ -31,10 +31,10 @@ Settings are in `%APPDATA%\ScreenRec\config.json` (tray menu → **Edit settings
 
 ## Writing the documents: Claude or local
 
-In the review window, **Settings · Connect Claude**:
+In the review window, **Settings**:
 
-- **Claude** reads the screenshots and names the exact buttons. Connect it with your own Anthropic
-  API key (stored encrypted with Windows DPAPI), or have Claude Code installed and signed in.
+- **Claude** reads the screenshots and names the exact buttons. It runs through
+  [Claude Code](https://claude.com/claude-code), so install it and sign in once (`claude`).
   The transcript and screenshots are sent to Anthropic.
 - **Local model**: [Ollama](https://ollama.com) with `qwen2.5:3b` (`ollama pull qwen2.5:3b`).
   Nothing leaves the PC; the wording is simpler.
@@ -71,4 +71,4 @@ powershell -ExecutionPolicy Bypass -File packaging\build.ps1
 | `screenrec/document.py` | Document: steps, screenshots, written guide |
 | `screenrec/describe.py` | WhatsApp message |
 | `screenrec/review.py`, `review.html` | Review window (local web page on 127.0.0.1) |
-| `screenrec/claude_link.py` | Connecting Claude (API key or Claude Code) |
+| `screenrec/claude_link.py` | Finding Claude Code for writing documents |

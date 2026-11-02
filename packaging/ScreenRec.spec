@@ -26,7 +26,7 @@ a = Analysis(
         # imported lazily inside functions, or picked per-platform at runtime
         "screenrec.tray", "screenrec.process", "screenrec.recorder", "screenrec.region", "screenrec.document",
         "pystray._win32", "pynput.keyboard._win32", "pynput.mouse._win32",
-        "faster_whisper", "uiautomation", "anthropic", "screenrec.claude_link",
+        "faster_whisper", "uiautomation", "screenrec.claude_link",
     ],
     excludes=["matplotlib", "pandas", "scipy", "IPython", "pytest"],
 )

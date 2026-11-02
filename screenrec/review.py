@@ -218,13 +218,7 @@ class Review:
         return out
 
     def settings(self, body):
-        """Connect Claude: save or remove an API key (tested first), or pick who writes documents."""
-        if body.get("api_key"):
-            key = body["api_key"].strip()
-            claude_link.test_key(key)
-            claude_link.save_key(key)
-        if body.get("remove_key"):
-            claude_link.remove_key()
+        """Pick who writes documents: Claude (through Claude Code) or the local model."""
         if body.get("writer") in ("claude", "ollama"):
             cfg = config.load()
             cfg["guide_writer"] = body["writer"]
