@@ -1,0 +1,15 @@
+# your own settings (the exe keeps them in %APPDATA%\ScreenRec)
+config.json
+
+.venv/
+__pycache__/
+*.pyc
+
+# build output
+build/
+dist/
+build.log
+packaging/ScreenRec.ico
+
+# local backups
+screenrec.bak-*/

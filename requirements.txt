@@ -1,0 +1,11 @@
+anthropic==2.3.0
+av==19.0.2
+faster-whisper==1.2.1
+numpy==2.5.4
+opencv-python==5.0.0.93
+pillow==13.0.0
+pynput==1.8.2
+pystray==0.19.5
+uiautomation==2.0.29
+# building the exe (packaging\build.ps1)
+pyinstaller==6.22.3

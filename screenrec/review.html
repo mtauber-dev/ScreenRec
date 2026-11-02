@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ScreenRec</title>
+<style>
+:root {
+  --bg: #f4f4f2; --panel: #ffffff; --line: #e3e3df; --text: #1d1d1b; --muted: #6d6d68;
+  --accent: #d93025; --accent-ink: #ffffff; --hover: #efefec; --sel: #fbe9e7;
+  --ok: #1e8e3e; --warn: #b26a00; --bubble: #d9fdd3; --chat: #efeae2; --link: #027eb5;
+  --shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161615; --panel: #1f1f1e; --line: #33332f; --text: #ececea; --muted: #9a9a94;
+    --accent: #ff5a4e; --accent-ink: #1b0a08; --hover: #2a2a28; --sel: #3a201d;
+    --ok: #5bc377; --warn: #f0b04a; --bubble: #005c4b; --chat: #0b141a; --link: #53bdeb;
+    --shadow: 0 1px 2px rgba(0,0,0,.4);
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { font: 14px/1.45 "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text);
+       display: grid; grid-template-columns: 280px 1fr; overflow: hidden; }
+button { font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--panel);
+         border-radius: 8px; padding: 7px 14px; }
+button:hover:not(:disabled) { background: var(--hover); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+button.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
+button.link { border: 0; background: none; padding: 4px 6px; color: var(--muted); }
+button.link:hover { color: var(--text); background: none; }
+button.danger:hover { color: var(--accent); }
+
+/* sidebar */
+aside { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
+.brand { padding: 16px 18px 12px; font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.brand i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); display: inline-block; }
+.list { overflow-y: auto; flex: 1; padding: 0 8px 12px; }
+.item { padding: 9px 10px; border-radius: 8px; cursor: pointer; margin-bottom: 2px; }
+.item:hover { background: var(--hover); }
+.item.sel { background: var(--sel); }
+.item .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item .m { color: var(--muted); font-size: 12px; display: flex; gap: 6px; align-items: center; }
+.chip { font-size: 11px; padding: 0 6px; border-radius: 10px; border: 1px solid currentColor; }
+.chip.ok { color: var(--ok); } .chip.warn { color: var(--warn); } .chip.bad { color: var(--accent); }
+.empty { color: var(--muted); padding: 24px 18px; }
+
+/* main */
+main { overflow-y: auto; min-height: 0; padding: 22px 28px 40px; }
+.head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+.head h1 { font-size: 20px; margin: 0; }
+.head .when { color: var(--muted); }
+.head .sp { flex: 1; }
+.grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr); gap: 22px; align-items: start; }
+@media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } body { grid-template-columns: 220px 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+.pad { padding: 16px 18px; }
+video { width: 100%; display: block; background: #000; border-radius: 12px 12px 0 0; max-height: 62vh; }
+.meta { color: var(--muted); padding: 10px 16px; display: flex; gap: 14px; flex-wrap: wrap; }
+details { border-top: 1px solid var(--line); }
+summary { padding: 12px 16px; cursor: pointer; color: var(--muted); }
+.opts { padding: 0 16px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; }
+.opts label { display: flex; gap: 8px; align-items: center; }
+.opts .full { grid-column: 1 / -1; }
+
+textarea { width: 100%; min-height: 220px; resize: vertical; font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
+           color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.tools { display: flex; gap: 4px; align-items: center; margin-bottom: 6px; }
+.tools .sp { flex: 1; }
+.tools .saved { color: var(--muted); font-size: 12px; }
+.chat { background: var(--chat); border-radius: 8px; padding: 14px; margin-top: 12px; }
+.bubble { background: var(--bubble); border-radius: 8px 0 8px 8px; padding: 8px 10px; margin-left: 12%;
+          white-space: pre-wrap; word-wrap: break-word; overflow-wrap: anywhere; font-size: 14px; }
+.bubble a { color: var(--link); }
+.bubble .vid { background: rgba(0,0,0,.18); border-radius: 6px; height: 64px; display: grid; place-items: center;
+               margin: -2px -4px 8px; color: #fff; font-size: 22px; }
+.steps { margin-top: 14px; display: grid; gap: 10px; }
+.step { display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: center; }
+.step .n { width: 26px; height: 26px; border-radius: 50%; background: var(--hover); display: grid; place-items: center;
+           font-weight: 700; font-size: 12px; }
+.step .d { color: var(--muted); font-size: 12px; }
+.step button, #wa { width: 100%; }
+.steps > .d { color: var(--muted); font-size: 12px; margin-top: -4px; }
+.manual { border: 0; }
+.manual summary { padding: 0; font-size: 12px; }
+.confirmed { color: var(--ok); font-weight: 600; }
+
+.state { text-align: center; padding: 70px 20px; }
+.state h2 { font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--text); }
+.state p { color: var(--muted); max-width: 520px; margin: 8px auto 18px; }
+.state pre { text-align: left; white-space: pre-wrap; background: var(--bg); padding: 10px; border-radius: 8px; color: var(--accent); }
+.spin { width: 34px; height: 34px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%;
+        animation: r 0.9s linear infinite; margin: 0 auto 16px; }
+@keyframes r { to { transform: rotate(360deg); } }
+.bar { height: 6px; background: var(--line); border-radius: 3px; max-width: 360px; margin: 0 auto; overflow: hidden; }
+.bar > div { height: 100%; background: var(--accent); transition: width .5s; }
+
+.row { display: flex; gap: 8px; justify-content: center; }
+.tabs { display: flex; gap: 4px; align-items: center; margin: -6px 0 14px; }
+.tab { border-radius: 18px; padding: 5px 14px; }
+.tab.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.tab.on:hover { background: var(--text); }
+.gtools { padding: 10px 14px; border-bottom: 1px solid var(--line); margin: 0; flex-wrap: wrap; gap: 6px; }
+.gtools .gmode.on { color: var(--text); font-weight: 600; }
+#gmd { border: 0; border-radius: 0 0 12px 12px; min-height: 70vh; font-family: Consolas, "Cascadia Mono", monospace; font-size: 13px; }
+.doc { padding: 22px 34px 34px; max-width: 980px; line-height: 1.6; }
+.doc h1 { font-size: 26px; margin: 0 0 8px; }
+.doc h2 { font-size: 19px; margin: 28px 0 8px; text-transform: none; letter-spacing: 0; color: var(--text); }
+.doc h3 { font-size: 16px; margin: 26px 0 8px; }
+.doc img { max-width: 100%; border: 1px solid var(--line); border-radius: 8px; display: block; margin: 6px 0; }
+.doc blockquote { margin: 6px 0; padding: 4px 14px; border-left: 3px solid var(--line); color: var(--muted); }
+.doc details { border: 0; margin-top: 18px; } .doc summary { padding: 0; }
+.doc a { color: var(--link); word-break: break-all; }
+.foot { text-align: left; padding: 12px 18px; border-top: 1px solid var(--line); border-radius: 0; }
+.settings { margin-bottom: 16px; max-width: 760px; }
+.settings label { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; }
+.settings label input { margin-top: 4px; }
+.settings .d { display: block; color: var(--muted); font-size: 12px; }
+.settings .warn { color: var(--warn); }
+.keyrow { display: flex; gap: 8px; }
+.keyrow input { flex: 1; font: 13px Consolas, monospace; padding: 7px 10px; border: 1px solid var(--line);
+                border-radius: 8px; background: var(--bg); color: var(--text); }
+#toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px); opacity: 0;
+         background: var(--text); color: var(--bg); padding: 9px 16px; border-radius: 8px; transition: .2s; pointer-events: none; }
+#toast.on { opacity: 1; transform: translateX(-50%); }
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand"><i></i> ScreenRec</div>
+  <div class="list" id="list"></div>
+  <button class="link foot" id="settings">⚙ Settings · Connect Claude</button>
+</aside>
+<main id="main"><div class="empty">Loading…</div></main>
+<div id="toast"></div>
+
+<script>
+const TOKEN = "__TOKEN__";
+let current = null, rec = null, poll = null, saveTimer = null, lastSaved = null, view = "video";
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined
+    ? { headers: { "X-Token": TOKEN } }
+    : { method: "POST", headers: { "X-Token": TOKEN, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+const act = (a, body = {}) => api(`/api/rec/${current}/${a}`, body);
+const $ = (s) => document.querySelector(s);
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("on");
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("on"), 2200);
+}
+function mmss(s) { s = Math.round(s || 0); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+function when(name) {
+  const m = name.match(/^(\d{4})-(\d\d)-(\d\d)_(\d\d)(\d\d)(\d\d)$/);
+  const d = new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5]);
+  const today = new Date().toDateString() === d.toDateString();
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return today ? `Today, ${time}` : `${d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })}, ${time}`;
+}
+function percent(msg) { const m = (msg || "").match(/(\d+)%/); return m ? +m[1] : null; }
+
+// WhatsApp formatting: *bold* _italic_ ~strike~ ```mono```, links left untouched.
+function wa(text) {
+  return text.split(/(https?:\/\/\S+)/g).map((part, i) => {
+    if (i % 2) return `<a href="${esc(part)}" target="_blank" rel="noreferrer">${esc(part)}</a>`;
+    let h = esc(part);
+    h = h.replace(/```([^`]+)```/g, "<code>$1</code>");
+    for (const [ch, tag] of [["\\*", "b"], ["_", "i"], ["~", "s"]])
+      h = h.replace(new RegExp(`(^|[\\s(>])${ch}(?!\\s)([^\\n]*?[^\\s])${ch}(?=$|[\\s).,!?:;<])`, "gm"), `$1<${tag}>$2</${tag}>`);
+    return h;
+  }).join("");
+}
+
+// ---------------- sidebar ----------------
+async function loadList() {
+  const items = await api("/api/list");
+  const el = $("#list");
+  if (!items.length) { el.innerHTML = `<div class="empty">No recordings yet. Press the hotkey to record.</div>`; return items; }
+  el.innerHTML = items.map((r) => {
+    const chip = r.state === "processing" || r.state === "queued" ? `<span class="chip warn">${r.state === "queued" ? "Waiting" : "Making…"}</span>`
+      : r.state === "failed" ? `<span class="chip bad">Failed</span>`
+      : r.confirmed ? `<span class="chip ok">Confirmed</span>` : r.state === "new" ? `<span class="chip">Not made</span>` : "";
+    return `<div class="item ${r.name === current ? "sel" : ""}" data-n="${r.name}">
+      <div class="t">${esc(r.title || "Untitled recording")}</div>
+      <div class="m"><span>${when(r.name)}</span>${r.duration ? `<span>· ${mmss(r.duration)}</span>` : ""}${(r.kinds || []).includes("guide") ? "<span>· Doc</span>" : ""}${chip}</div></div>`;
+  }).join("");
+  el.querySelectorAll(".item").forEach((n) => n.onclick = () => { location.hash = n.dataset.n; });
+  return items;
+}
+
+// ---------------- main ----------------
+async function select(name) {
+  await flushSave();
+  current = name;
+  document.querySelectorAll(".item").forEach((n) => n.classList.toggle("sel", n.dataset.n === name));
+  try { rec = await api(`/api/rec/${name}`); } catch (e) { $("#main").innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  render();
+}
+
+function render() {
+  clearInterval(poll);
+  const r = rec, m = $("#main");
+  const head = `<div class="head"><h1>${esc(r.title || "Untitled recording")}</h1><span class="when">${when(r.name)}</span>
+    <span class="sp"></span><button class="link" id="folder">Show in folder</button>
+    <button class="link danger" id="del">Delete</button></div>`;
+
+  if (r.state === "processing" || r.state === "queued") {
+    const p = percent(r.message);
+    m.innerHTML = head + `<div class="card state"><div class="spin"></div><h2>Working on it…</h2>
+      <p>${esc(r.message || "")}</p>${p !== null ? `<div class="bar"><div style="width:${p}%"></div></div>` : ""}
+      <p>You can close this window; ScreenRec will let you know when it's ready.</p></div>`;
+    poll = setInterval(refresh, 1000);
+  } else if (r.state === "failed" || r.state === "new") {
+    m.innerHTML = head + `<div class="card state">
+      <h2>${r.state === "failed" ? "That didn't work" : "Nothing has been made from this recording yet"}</h2>
+      ${r.error ? `<pre>${esc(r.error)}</pre>` : ""}
+      ${r.has_raw ? `<div class="row"><button class="primary" id="mk_video">Make video</button>
+        <button id="mk_document">Make document</button><button id="mk_both">Both</button></div>`
+        : "<p>The original recording wasn't kept.</p>"}</div>`;
+    for (const o of ["video", "document", "both"])
+      if ($("#mk_" + o)) $("#mk_" + o).onclick = () => remake({}, !r.text, o);
+  } else {
+    const tabs = [r.video && "video", r.guide !== null && "guide"].filter(Boolean);
+    if (!tabs.includes(view)) view = tabs[0];
+    const tabbar = `<div class="tabs">${tabs.map((t) => `<button class="tab ${t === view ? "on" : ""}" data-v="${t}">${t === "video" ? "Video" : "Document"}</button>`).join("")}
+      ${!r.video && r.has_raw ? `<button class="link" id="mk_more" data-o="video">+ Make video</button>` : ""}
+      ${r.guide === null && r.has_raw ? `<button class="link" id="mk_more" data-o="document">+ Make document</button>` : ""}</div>`;
+    if (view === "guide") renderGuide(r, m, head + tabbar);
+    else {
+    m.innerHTML = head + tabbar + `<div class="grid">
+      <div class="card">
+        <video id="v" controls preload="metadata" src="/media/${r.name}/${encodeURIComponent(r.video)}?t=${TOKEN}">
+          ${r.captions ? `<track kind="captions" srclang="en" label="Captions" src="/media/${r.name}/captions.vtt?t=${TOKEN}" default>` : ""}
+        </video>
+        <div class="meta"><span>${mmss(r.duration)}</span><span>${r.size_mb ? r.size_mb.toFixed(1) + " MB" : ""}</span>
+          ${r.raw_duration && r.raw_duration - r.duration > 1 ? `<span>${mmss(r.raw_duration - r.duration)} of idle time cut</span>` : ""}</div>
+        <details><summary>Re-make the video with different options</summary>
+          <div class="opts">
+            <label><input type="checkbox" id="o_trim_idle" checked> Cut idle parts</label>
+            <label><input type="checkbox" id="o_zoom_enabled" checked> Zoom on clicks</label>
+            <label><input type="checkbox" id="o_captions" checked> Captions</label>
+            <label><input type="checkbox" id="o_click_highlights" checked> Click circles</label>
+            <label><input type="checkbox" id="o_key_overlay" checked> Show shortcut keys</label>
+            <label class="full"><input type="checkbox" id="o_rewrite"> Also rewrite the message (replaces your edits)</label>
+            <div class="full"><button id="remake" ${r.has_raw ? "" : "disabled title='The original recording was not kept'"}>Re-make video</button></div>
+          </div></details>
+      </div>
+      <div class="card pad">
+        <h2>WhatsApp message</h2>
+        <div class="tools">
+          <button class="link" id="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+          <button class="link" id="ital" title="Italic (Ctrl+I)"><i>I</i></button>
+          ${r.can_rewrite ? `<button class="link" id="rewrite" title="Write a fresh message from the narration">↻ Rewrite</button>` : ""}
+          <span class="sp"></span><span class="saved" id="saved"></span>
+        </div>
+        <textarea id="text" dir="auto" spellcheck="true"></textarea>
+        <div class="chat"><div class="bubble" dir="auto" id="preview"></div></div>
+        ${r.whatsapp_to ? `<div class="steps">
+          <button class="primary" id="wa">Send to ${esc(r.whatsapp_to)}</button>
+          <div class="d" id="wad">${r.whatsapp_requested ? `<span class="confirmed">✓ Sent to Claude on ${esc(r.whatsapp_requested)}.</span> ` : ""}Opens Claude Code with the video and this message ready. Approve the send there, then forward it from your phone.</div>
+          <details class="manual"><summary>Or copy them by hand</summary></details>
+        </div>` : ""}
+        <div class="steps" id="manual" ${r.whatsapp_to ? "hidden" : ""}>
+          <div class="step"><div class="n">1</div><div><button id="copyv">Copy video</button>
+            <div class="d">In WhatsApp, open the chat and press Ctrl+V.</div></div></div>
+          <div class="step"><div class="n">2</div><div><button class="${r.whatsapp_to ? "" : "primary"}" id="confirm">Confirm &amp; copy message</button>
+            <div class="d" id="confd">Paste it as the caption (Ctrl+V), then send.</div></div></div>
+        </div>
+      </div></div>`;
+    const ta = $("#text");
+    ta.value = r.text; lastSaved = r.text;
+    preview(); markConfirmed(r.confirmed);
+    ta.oninput = () => { preview(); markConfirmed(false); $("#saved").textContent = "Editing…"; clearTimeout(saveTimer); saveTimer = setTimeout(flushSave, 700); };
+    ta.onkeydown = (e) => { if (e.ctrlKey && (e.key === "b" || e.key === "i")) { e.preventDefault(); wrap(e.key === "b" ? "*" : "_"); } };
+    $("#bold").onclick = () => wrap("*");
+    $("#ital").onclick = () => wrap("_");
+    if ($("#rewrite")) $("#rewrite").onclick = rewrite;
+    if ($("#wa")) {
+      $(".manual").ontoggle = (e) => { $("#manual").hidden = !e.target.open; };
+      $("#wa").onclick = async () => {
+        const b = $("#wa"); b.disabled = true;
+        try {
+          await act("whatsapp", { text: ta.value }); lastSaved = ta.value;
+          $("#wad").innerHTML = `<span class="confirmed">✓ Claude Code is opening.</span> Approve the send in that window, then forward it from your phone.`;
+          markConfirmed(true); loadList();
+        } catch (e) { toast("Couldn't start the send: " + e.message); }
+        setTimeout(() => { b.disabled = false; }, 4000);
+      };
+    }
+    $("#copyv").onclick = async () => { await act("copy-video"); toast("Video copied. Paste it into WhatsApp."); };
+    $("#confirm").onclick = async () => {
+      await act("confirm", { text: ta.value }); lastSaved = ta.value; rec.confirmed = true;
+      markConfirmed(true); $("#saved").textContent = "Saved"; toast("Message saved and copied"); loadList();
+    };
+    $("#remake").onclick = () => {
+      const options = {};
+      for (const k of ["trim_idle", "zoom_enabled", "captions", "click_highlights", "key_overlay"]) options[k] = $("#o_" + k).checked;
+      remake(options, $("#o_rewrite").checked);
+    };
+    }
+    document.querySelectorAll(".tab").forEach((b) => b.onclick = async () => { await flushSave(); view = b.dataset.v; render(); });
+    if ($("#mk_more")) $("#mk_more").onclick = (e) => remake({}, false, e.target.dataset.o);
+  }
+  $("#folder").onclick = () => act("folder");
+  $("#del").onclick = del;
+}
+
+function preview() { $("#preview").innerHTML = `<div class="vid">▶</div>` + wa($("#text").value.trim()); }
+function markConfirmed(on) {
+  const d = $("#confd"); if (!d) return;
+  d.innerHTML = on ? `<span class="confirmed">✓ Confirmed.</span> Paste it as the caption (Ctrl+V), then send.` : "Paste it as the caption (Ctrl+V), then send.";
+}
+function wrap(ch) {
+  const ta = $("#text"), s = ta.selectionStart, e = ta.selectionEnd;
+  ta.setRangeText(ch + ta.value.slice(s, e) + ch, s, e, "end");
+  ta.dispatchEvent(new Event("input")); ta.focus();
+}
+async function flushSave() {
+  clearTimeout(saveTimer);
+  const ta = $("#text") || $("#gmd");
+  if (!ta || !current || ta.value === lastSaved) return;
+  const text = ta.value;
+  try {
+    if (ta.id === "gmd") { await act("save-guide", { md: text }); rec.guide = text; }
+    else await act("save", { text });
+    lastSaved = text; if ($("#saved")) $("#saved").textContent = "Saved"; loadList();
+  } catch (e) { toast("Couldn't save: " + e.message); }
+}
+
+// ---------------- document view ----------------
+// A small Markdown renderer for what the guide uses (headings, images, lists, quotes, links, details).
+function mdInline(s) {
+  return esc(s)
+    .replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, src) => `<img alt="${alt}" src="${/^https?:/.test(src) ? src : `/media/${current}/guide/${src}?t=${TOKEN}`}">`)
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>')
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1<i>$2</i>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+function mdToHtml(src) {
+  const out = []; let para = [], list = null;
+  const flush = () => {
+    if (para.length) { out.push(`<p>${mdInline(para.join(" "))}</p>`); para = []; }
+    if (list) { out.push(`<${list.tag}>${list.items.map((i) => `<li>${mdInline(i)}</li>`).join("")}</${list.tag}>`); list = null; }
+  };
+  for (const line of src.split(/\r?\n/)) {
+    let m;
+    if (!line.trim()) { flush(); continue; }
+    if ((m = line.match(/^(#{1,6})\s+(.*)$/))) { flush(); out.push(`<h${m[1].length}>${mdInline(m[2])}</h${m[1].length}>`); }
+    else if (/^\s*<\/?details>\s*$/.test(line)) { flush(); out.push(line.trim()); }
+    else if ((m = line.match(/^\s*<summary>(.*)<\/summary>\s*$/))) { flush(); out.push(`<summary>${esc(m[1])}</summary>`); }
+    else if ((m = line.match(/^>\s?(.*)$/))) { flush(); out.push(`<blockquote>${mdInline(m[1])}</blockquote>`); }
+    else if ((m = line.match(/^\s*([-*]|\d+\.)\s+(.*)$/))) {
+      const tag = /\d/.test(m[1]) ? "ol" : "ul";
+      if (para.length || (list && list.tag !== tag)) flush();
+      list = list || { tag, items: [] }; list.items.push(m[2]);
+    }
+    else { if (list) flush(); para.push(line.trim()); }
+  }
+  flush();
+  return out.join("\n");
+}
+function renderGuide(r, m, top) {
+  m.innerHTML = top + `<div class="card">
+    <div class="tools gtools">
+      <button class="link gmode on" data-m="preview">Preview</button><button class="link gmode" data-m="edit">Edit</button>
+      <span class="sp"></span><span class="saved" id="saved"></span>
+      <button id="gcopy">Copy Markdown</button><button id="gopen">Open file</button><button id="gfolder">Show folder</button>
+      ${r.has_raw ? `<button class="link" id="gremake" title="Write the document again from the recording (replaces your edits)">↻ Re-make</button>` : ""}
+    </div>
+    <article class="doc" id="gview" dir="auto"></article>
+    <textarea id="gmd" dir="auto" spellcheck="true" hidden></textarea></div>`;
+  const ta = $("#gmd");
+  ta.value = r.guide; lastSaved = r.guide;
+  $("#gview").innerHTML = mdToHtml(r.guide);
+  document.querySelectorAll(".gmode").forEach((b) => b.onclick = () => {
+    const edit = b.dataset.m === "edit";
+    document.querySelectorAll(".gmode").forEach((x) => x.classList.toggle("on", x === b));
+    ta.hidden = !edit; $("#gview").hidden = edit;
+    if (!edit) $("#gview").innerHTML = mdToHtml(ta.value);
+  });
+  ta.oninput = () => { $("#saved").textContent = "Editing…"; clearTimeout(saveTimer); saveTimer = setTimeout(flushSave, 700); };
+  $("#gcopy").onclick = async () => { await flushSave(); await act("copy-guide"); toast("Markdown copied (pictures are in the guide folder)"); };
+  $("#gopen").onclick = async () => { await flushSave(); act("open-guide"); };
+  $("#gfolder").onclick = () => act("guide-folder");
+  if ($("#gremake")) $("#gremake").onclick = () => {
+    if (confirm("Write the document again from the recording? Your edits to it will be replaced.")) remake({}, false, "document");
+  };
+}
+async function rewrite() {
+  const b = $("#rewrite"); b.disabled = true; b.textContent = "↻ Writing…";
+  try {
+    const { text } = await act("rewrite");
+    const ta = $("#text"); ta.value = text; ta.dispatchEvent(new Event("input")); toast("New message written. Check it over.");
+  } catch (e) { toast("Rewrite failed: " + e.message); }
+  b.disabled = false; b.textContent = "↻ Rewrite";
+}
+async function remake(options, rewriteText, output = "video") {
+  await flushSave();
+  const v = $("#v"); if (v) { v.removeAttribute("src"); v.load(); }  // release the file so it can be replaced
+  if (output !== "video") view = "guide";
+  try { await act("remake", { options, rewrite_text: rewriteText, output }); } catch (e) { toast(e.message); }
+  refresh(); loadList();
+}
+async function del() {
+  if (!confirm("Move this recording to the Recycle Bin?")) return;
+  const v = $("#v"); if (v) { v.removeAttribute("src"); v.load(); }
+  const ed = $("#text") || $("#gmd"); clearTimeout(saveTimer); lastSaved = ed ? ed.value : null;
+  try {
+    await act("delete");
+    toast("Moved to the Recycle Bin");
+    const items = await loadList();
+    current = null;
+    if (items.length) location.hash = items[0].name; else $("#main").innerHTML = `<div class="empty">No recordings left.</div>`;
+  } catch (e) { toast(e.message); select(current); }
+}
+async function refresh() {
+  const was = rec && rec.state;
+  try { rec = await api(`/api/rec/${current}`); } catch (e) { return; }
+  if (rec.state !== was) { render(); loadList(); }
+  else if (rec.state === "processing" || rec.state === "queued") {
+    const p = percent(rec.message);
+    const msg = document.querySelector(".state p"); if (msg) msg.textContent = rec.message || "";
+    const bar = document.querySelector(".bar > div"); if (bar && p !== null) bar.style.width = p + "%";
+    else if (p !== null && !bar) render();
+  }
+}
+
+// ---------------- settings ----------------
+async function renderSettings() {
+  await flushSave();
+  clearInterval(poll); current = null;
+  document.querySelectorAll(".item").forEach((n) => n.classList.remove("sel"));
+  const s = await api("/api/settings");
+  const via = s.api_key ? `your API key (${esc(s.api_key)})` : s.env_key ? "the ANTHROPIC_API_KEY on this PC"
+    : s.claude_code ? "Claude Code on this PC" : null;
+  $("#main").innerHTML = `<div class="head"><h1>Settings</h1></div>
+    <div class="card pad settings">
+      <h2>Who writes the documents</h2>
+      <label><input type="radio" name="writer" value="claude" ${s.writer === "claude" ? "checked" : ""}>
+        <span><b>Claude</b> - reads the screenshots and names the exact buttons. Best results.
+        <span class="d">The transcript and screenshots are sent to Anthropic.</span></span></label>
+      <label><input type="radio" name="writer" value="ollama" ${s.writer === "ollama" ? "checked" : ""}>
+        <span><b>Local model (Ollama)</b> - everything stays on this PC. Simpler wording, slower.</span></label>
+    </div>
+    <div class="card pad settings">
+      <h2>Connect Claude</h2>
+      <p class="${via ? "confirmed" : "warn"}">${via ? `✓ Connected through ${via}.` : "Not connected yet. Documents will use the local model until you connect."}</p>
+      ${s.api_key ? `<p><button id="rmkey">Remove API key</button></p>` : `
+      <p><b>Use your Anthropic API key</b> (works on any PC, no other install needed):</p>
+      <div class="keyrow"><input type="password" id="key" placeholder="sk-ant-..." autocomplete="off" spellcheck="false">
+        <button class="primary" id="savekey">Connect</button></div>
+      <p class="d">Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">console.anthropic.com</a> → API keys. It's saved encrypted, readable only by your Windows account on this PC.</p>`}
+      <p class="d">${s.claude_code ? "Claude Code is installed, so ScreenRec can also use your Claude sign-in through it." : "Or install Claude Code and sign in once; ScreenRec will use it automatically."}</p>
+    </div>`;
+  document.querySelectorAll("input[name=writer]").forEach((r) => r.onchange = async () => {
+    await api("/api/settings", { writer: r.value }); toast("Saved");
+  });
+  if ($("#savekey")) $("#savekey").onclick = async () => {
+    const b = $("#savekey"), key = $("#key").value.trim();
+    if (!key) return;
+    b.disabled = true; b.textContent = "Checking…";
+    try { await api("/api/settings", { api_key: key }); toast("Claude connected"); renderSettings(); }
+    catch (e) { toast(e.message); b.disabled = false; b.textContent = "Connect"; }
+  };
+  if ($("#rmkey")) $("#rmkey").onclick = async () => {
+    if (!confirm("Remove the saved API key from this PC?")) return;
+    await api("/api/settings", { remove_key: true }); toast("Key removed"); renderSettings();
+  };
+}
+
+function route() {
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (h === "settings") renderSettings(); else if (h) select(h);
+}
+window.addEventListener("hashchange", route);
+window.addEventListener("beforeunload", () => flushSave());
+(async () => {
+  const items = await loadList();
+  $("#settings").onclick = () => { location.hash = "settings"; };
+  const want = decodeURIComponent(location.hash.slice(1));
+  if (want) route();
+  else if (items.length) location.hash = items[0].name;
+  else $("#main").innerHTML = `<div class="empty">No recordings yet. Press the hotkey to record, then come back here.</div>`;
+  setInterval(() => { if (!document.hidden) loadList(); }, 4000);
+})();
+</script>
+</body>
+</html>
