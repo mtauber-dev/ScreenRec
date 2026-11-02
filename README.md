@@ -60,6 +60,20 @@ Build the exe (bundles the ffmpeg found on `PATH`):
 powershell -ExecutionPolicy Bypass -File packaging\build.ps1
 ```
 
+## Documentation
+
+The full user guide is in the [wiki](https://github.com/mtauber-dev/ScreenRec/wiki).
+
+## Support
+
+If ScreenRec saves you time, you can [sponsor its development](https://github.com/sponsors/mtauber-dev).
+
+## License
+
+ScreenRec is free software under the [GNU General Public License v3.0](LICENSE): you may use,
+study, change and share it, and anything you share that's based on it must stay under the same
+license, with its source available.
+
 ## Layout
 
 | File | What it does |
