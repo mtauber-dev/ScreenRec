@@ -122,6 +122,27 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 .settings label input { margin-top: 4px; }
 .settings .d { display: block; color: var(--muted); font-size: 12px; }
 .settings .warn { color: var(--warn); }
+/* video editor */
+.editor { padding: 4px 16px 16px; }
+.editor .hint { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+.tl { position: relative; height: 38px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+      cursor: pointer; overflow: hidden; user-select: none; }
+.tl .cut { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--accent); border-right: 2px solid var(--accent);
+           background: repeating-linear-gradient(45deg, rgba(217,48,37,.55) 0 6px, rgba(217,48,37,.3) 6px 12px); }
+.tl .pending { position: absolute; top: 0; bottom: 0; background: rgba(217,48,37,.18); border-left: 2px dashed var(--accent); }
+.tl .ph { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); pointer-events: none; }
+.tl .ticks { position: absolute; left: 6px; right: 6px; bottom: 2px; display: flex; justify-content: space-between;
+             font-size: 10px; color: var(--muted); pointer-events: none; }
+.etools { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+.etools .now { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 64px; }
+.etools .sp { flex: 1; }
+.cuts { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.cuts li { display: flex; gap: 8px; align-items: center; font-variant-numeric: tabular-nums; }
+.cuts li .d { color: var(--muted); font-size: 12px; }
+.applied { color: var(--muted); font-size: 12px; margin-top: 10px; }
+.settings input[type=text] { width: 100%; margin-top: 4px; padding: 6px 8px; font: inherit; color: var(--text);
+                             background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+.settings label.block { display: block; }
 #toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px); opacity: 0;
          background: var(--text); color: var(--bg); padding: 9px 16px; border-radius: 8px; transition: .2s; pointer-events: none; }
 #toast.on { opacity: 1; transform: translateX(-50%); }
@@ -207,6 +228,7 @@ async function select(name) {
 function render() {
   clearInterval(poll);
   const r = rec, m = $("#main");
+  const opt = (k) => (r.options && k in r.options ? r.options[k] : true) ? "checked" : "";
   const head = `<div class="head"><h1>${esc(r.title || "Untitled recording")}</h1><span class="when">${when(r.name)}</span>
     <span class="sp"></span><button class="link" id="folder">Show in folder</button>
     <button class="link danger" id="del">Delete</button></div>`;
@@ -241,13 +263,34 @@ function render() {
         </video>
         <div class="meta"><span>${mmss(r.duration)}</span><span>${r.size_mb ? r.size_mb.toFixed(1) + " MB" : ""}</span>
           ${r.raw_duration && r.raw_duration - r.duration > 1 ? `<span>${mmss(r.raw_duration - r.duration)} of idle time cut</span>` : ""}</div>
+        <details id="edit" ${editorOpen ? "open" : ""}><summary>✂ Edit: cut out parts of the video</summary>
+          <div class="editor">${r.can_edit ? `
+            <p class="hint">Play or click the bar to get to a spot, then use the buttons. While you play, the marked parts are skipped, so you can check the result. Nothing changes until you apply.</p>
+            <div class="tl" id="tl"><div class="ticks"><span>0:00</span><span>${mmss(r.duration)}</span></div><div class="ph" id="ph"></div></div>
+            <div class="etools">
+              <span class="now" id="now">0:00.0</span>
+              <button id="e_start" title="Cut everything before this point">⇤ Trim start here</button>
+              <button id="e_from" title="Start a cut here, then go to where it should end">[ Cut from here</button>
+              <button id="e_to" disabled title="End the cut here">Cut to here ]</button>
+              <button id="e_end" title="Cut everything after this point">Trim end here ⇥</button>
+            </div>
+            <ul class="cuts" id="cuts"></ul>
+            <div class="etools">
+              <button class="primary" id="e_apply" disabled>Apply cuts</button>
+              <button class="link" id="e_clear" hidden>Clear marks</button>
+              <span class="sp"></span>
+              ${r.cuts ? `<button class="link danger" id="e_undo">Undo all edits</button>` : ""}
+            </div>
+            ${r.cuts ? `<div class="applied">${r.cuts} cut${r.cuts > 1 ? "s are" : " is"} already applied to this video. Cuts are kept when you re-make it.</div>` : ""}`
+          : `<p class="hint">${r.has_raw ? "Re-make the video once (below) to turn on editing for this recording." : "The original recording (raw.mkv) wasn't kept, so this video can't be edited."}</p>`}
+          </div></details>
         <details><summary>Re-make the video with different options</summary>
           <div class="opts">
-            <label><input type="checkbox" id="o_trim_idle" checked> Cut idle parts</label>
-            <label><input type="checkbox" id="o_zoom_enabled" checked> Zoom on clicks</label>
-            <label><input type="checkbox" id="o_captions" checked> Captions</label>
-            <label><input type="checkbox" id="o_click_highlights" checked> Click circles</label>
-            <label><input type="checkbox" id="o_key_overlay" checked> Show shortcut keys</label>
+            <label><input type="checkbox" id="o_trim_idle" ${opt("trim_idle")}> Cut idle parts</label>
+            <label><input type="checkbox" id="o_zoom_enabled" ${opt("zoom_enabled")}> Zoom on clicks</label>
+            <label><input type="checkbox" id="o_captions" ${opt("captions")}> Captions</label>
+            <label><input type="checkbox" id="o_click_highlights" ${opt("click_highlights")}> Click circles</label>
+            <label><input type="checkbox" id="o_key_overlay" ${opt("key_overlay")}> Show shortcut keys</label>
             <label class="full"><input type="checkbox" id="o_rewrite"> Also rewrite the message (replaces your edits)</label>
             <div class="full"><button id="remake" ${r.has_raw ? "" : "disabled title='The original recording was not kept'"}>Re-make video</button></div>
           </div></details>
@@ -304,12 +347,89 @@ function render() {
       for (const k of ["trim_idle", "zoom_enabled", "captions", "click_highlights", "key_overlay"]) options[k] = $("#o_" + k).checked;
       remake(options, $("#o_rewrite").checked);
     };
+    setupEditor(r);
     }
     document.querySelectorAll(".tab").forEach((b) => b.onclick = async () => { await flushSave(); view = b.dataset.v; render(); });
     if ($("#mk_more")) $("#mk_more").onclick = (e) => remake({}, false, e.target.dataset.o);
   }
   $("#folder").onclick = () => act("folder");
   $("#del").onclick = del;
+}
+
+// ---------------- video editor ----------------
+// Cuts are marked in the current video's time; the server maps them onto the original recording and
+// re-makes the video without them (same options and message, no new transcription).
+let editorOpen = false, cuts = [], cutsFor = null, cutFrom = null;
+function setupEditor(r) {
+  const v = $("#v"), tl = $("#tl"), ed = $("#edit");
+  ed.ontoggle = () => { editorOpen = ed.open; };
+  if (!tl) return;
+  if (cutsFor !== r.name) { cuts = []; cutsFor = r.name; cutFrom = null; }
+  const dur = () => v.duration || r.duration || 1;
+  const fmt = (s) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
+  const pct = (s) => `${(100 * s / dur()).toFixed(3)}%`;
+  function merged() {
+    const out = [];
+    for (const [a, b] of [...cuts].sort((x, y) => x[0] - y[0])) {
+      const last = out[out.length - 1];
+      if (last && a <= last[1]) last[1] = Math.max(last[1], b); else out.push([a, b]);
+    }
+    return out;
+  }
+  function draw() {
+    tl.querySelectorAll(".cut, .pending").forEach((n) => n.remove());
+    const list = merged();
+    for (const [a, b] of list) {
+      const d = document.createElement("div"); d.className = "cut";
+      d.style.left = pct(a); d.style.width = pct(b - a); tl.appendChild(d);
+    }
+    if (cutFrom !== null) {
+      const d = document.createElement("div"); d.className = "pending";
+      const a = Math.min(cutFrom, v.currentTime), b = Math.max(cutFrom, v.currentTime);
+      d.style.left = pct(a); d.style.width = pct(b - a); tl.appendChild(d);
+    }
+    $("#ph").style.left = pct(v.currentTime);
+    $("#now").textContent = fmt(v.currentTime);
+    $("#cuts").innerHTML = list.map(([a, b], i) => `<li>✂ ${fmt(a)} – ${fmt(b)} <span class="d">(${(b - a).toFixed(1)} s)</span>
+      <button class="link" data-i="${i}" title="Remove this cut">✕</button></li>`).join("");
+    $("#cuts").querySelectorAll("button").forEach((b) => b.onclick = () => { cuts = merged(); cuts.splice(+b.dataset.i, 1); draw(); });
+    const left = dur() - list.reduce((t, [a, b]) => t + b - a, 0);
+    $("#e_apply").disabled = !list.length || left < 0.5;
+    $("#e_apply").textContent = list.length ? `Apply cuts (video becomes ${mmss(left)})` : "Apply cuts";
+    $("#e_clear").hidden = !list.length && cutFrom === null;
+    $("#e_to").disabled = cutFrom === null;
+    $("#e_from").textContent = cutFrom === null ? "[ Cut from here" : `[ Cut from ${fmt(cutFrom)}`;
+  }
+  const add = (a, b) => { if (b - a >= 0.05) cuts.push([a, b]); draw(); };
+  tl.onclick = (e) => { const b = tl.getBoundingClientRect(); v.currentTime = Math.max(0, Math.min(dur(), (e.clientX - b.left) / b.width * dur())); };
+  v.ontimeupdate = () => {
+    if (!v.paused)  // preview: jump over the marked parts while playing
+      for (const [a, b] of merged()) if (v.currentTime >= a && v.currentTime < b - 0.05) { v.currentTime = Math.min(b, dur()); break; }
+    draw();
+  };
+  v.onseeked = draw; v.onloadedmetadata = draw;
+  $("#e_start").onclick = () => add(0, v.currentTime);
+  $("#e_end").onclick = () => add(v.currentTime, dur());
+  $("#e_from").onclick = () => { cutFrom = v.currentTime; draw(); };
+  $("#e_to").onclick = () => { const a = Math.min(cutFrom, v.currentTime), b = Math.max(cutFrom, v.currentTime); cutFrom = null; add(a, b); };
+  $("#e_clear").onclick = () => { cuts = []; cutFrom = null; draw(); };
+  $("#e_apply").onclick = async () => {
+    const list = merged();
+    if (!confirm(`Cut ${list.length} part${list.length > 1 ? "s" : ""} out of the video? You can undo it later.`)) return;
+    await flushSave();
+    v.removeAttribute("src"); v.load();  // release the file so it can be replaced
+    try { await act("edit", { cuts: list }); cuts = []; cutFrom = null; toast("Cutting: the video is being re-made"); }
+    catch (e) { toast(e.message); }
+    refresh(); loadList();
+  };
+  if ($("#e_undo")) $("#e_undo").onclick = async () => {
+    if (!confirm("Put back everything you cut from this video?")) return;
+    await flushSave();
+    v.removeAttribute("src"); v.load();
+    try { await act("edit-reset"); toast("Putting the cut parts back"); } catch (e) { toast(e.message); }
+    refresh(); loadList();
+  };
+  draw();
 }
 
 function preview() { $("#preview").innerHTML = `<div class="vid">▶</div>` + wa($("#text").value.trim()); }
@@ -454,7 +574,23 @@ async function renderSettings() {
         ? `<p class="confirmed">✓ Claude Code is installed. ScreenRec uses your Claude sign-in through it.</p>`
         : `<p class="warn">Claude Code isn't installed on this PC, so documents use the local model.</p>
            <p class="d">To use Claude, install Claude Code from <a href="https://claude.com/claude-code" target="_blank" rel="noreferrer">claude.com/claude-code</a>, run <code>claude</code> once to sign in, then restart ScreenRec.</p>`}
+    </div>
+    <div class="card pad settings">
+      <h2>WhatsApp group</h2>
+      <p class="d">With a group set, each video gets a <b>Send to …</b> button. It opens Claude Code with the WhatsApp plugin, where you approve the send. Leave the ID empty to copy videos by hand instead.</p>
+      <label class="block">Group ID <span class="d">Ask Claude Code for the chatId of your WhatsApp group. It looks like 1203630000000000@g.us.</span>
+        <input type="text" id="wa_id" value="${esc(s.whatsapp_chat_id)}" placeholder="1203630000000000@g.us"></label>
+      <label class="block">Group name <span class="d">Shown on the Send button.</span>
+        <input type="text" id="wa_name" value="${esc(s.whatsapp_chat_name)}" placeholder="Tutorials"></label>
+      <button id="wa_save">Save</button> <span class="d" id="wa_state"></span>
     </div>`;
+  const waState = (x) => { $("#wa_state").innerHTML = x.whatsapp_chat_id
+    ? `<span class="confirmed">✓ Connected to ${esc(x.whatsapp_chat_name || x.whatsapp_chat_id)}</span>` : "Not connected: videos are copied by hand."; };
+  waState(s);
+  $("#wa_save").onclick = async () => {
+    try { waState(await api("/api/settings", { whatsapp_chat_id: $("#wa_id").value, whatsapp_chat_name: $("#wa_name").value })); toast("Saved"); }
+    catch (e) { toast(e.message); }
+  };
   document.querySelectorAll("input[name=writer]").forEach((r) => r.onchange = async () => {
     await api("/api/settings", { writer: r.value }); toast("Saved");
   });

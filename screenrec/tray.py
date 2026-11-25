@@ -65,6 +65,7 @@ class App:
             M(label, self._set_output(key), checked=lambda _i, k=key: (self.cfg.output or "video") == k, radio=True)
             for key, label in (("video", "Video"), ("document", "Document (steps + screenshots)"),
                                ("both", "Video and document"))]))
+        yield M("Zoom on clicks", self._toggle_zoom_default, checked=lambda _i: bool(self.cfg.zoom_enabled))
         yield M("Microphone", pystray.Menu(*mic_items))
         yield M("Open recordings folder", lambda: os.startfile(self._out_root()))
         yield M("Edit settings", lambda: os.startfile(config.CONFIG_PATH))
@@ -86,6 +87,24 @@ class App:
             self.cfg["output"] = key
             config.save(self.cfg)
         return f
+
+    def _toggle_zoom_default(self):
+        """The setting for new recordings. While recording, the bar (or the zoom hotkey) switches it."""
+        self.cfg["zoom_enabled"] = not self.cfg.zoom_enabled
+        saved = config.load()
+        saved["zoom_enabled"] = self.cfg["zoom_enabled"]
+        config.save(saved)
+        self.icon.notify("Videos will zoom in on clicks." if self.cfg.zoom_enabled else
+                         "Videos won't zoom in on clicks.", "Zoom " + ("on" if self.cfg.zoom_enabled else "off"))
+
+    def toggle_zoom(self):
+        """Zoom hotkey: during a recording, switch zoom on clicks off/on from now on."""
+        rec = self.rec
+        if self.state in ("recording", "paused") and rec:
+            on = rec.toggle_zoom()
+            self.icon.notify("Clicks from now on are zoomed in." if on else
+                             "Clicks from now on are not zoomed in. Press again to turn it back on.",
+                             "Zoom " + ("on" if on else "off"))
 
     def _out_root(self):
         p = Path(self.cfg.output_dir)
@@ -127,7 +146,7 @@ class App:
                 return
             self.overlay = self.ui.show_recording(self.rec, area, {
                 "pause": self.toggle_pause, "resume": self.toggle_pause,
-                "restart": self.restart, "stop": self.stop})
+                "restart": self.restart, "stop": self.stop, "zoom": self.rec.toggle_zoom})
             self._set_state("recording", f"Recording… {self.hk} to stop")
         if self.cfg.mic and not self.rec.has_audio:
             self.icon.notify("Microphone failed to open – recording without sound.", "ScreenRec")
@@ -170,7 +189,9 @@ class App:
                 self._set_state("idle")
                 self.icon.notify(str(e)[:250], "Recording failed")
                 return
-            self.jobs.start(session, self.cfg)
+            cfg = config.Config(self.cfg)
+            cfg["zoom_enabled"] = self.rec.zoom_used()  # switched on partway through counts too
+            self.jobs.start(session, cfg)
             self._set_state("idle")
         self.review.open(session.name)
 
@@ -199,7 +220,9 @@ class App:
 
     def run(self):
         # Hotkey callbacks run inside the keyboard hook: hand off to a thread immediately.
-        self.hotkeys = keyboard.GlobalHotKeys({self.cfg.hotkey: lambda: self._bg(self.toggle)})
+        self.hotkeys = keyboard.GlobalHotKeys({self.cfg.hotkey: lambda: self._bg(self.toggle),
+                                               self.cfg.zoom_hotkey or "<ctrl>+<alt>+z":
+                                                   lambda: self._bg(self.toggle_zoom)})
         self.hotkeys.start()
 
         def ready(icon):

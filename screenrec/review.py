@@ -93,17 +93,17 @@ class Jobs:
         live = {n for n, s in self.state.items() if s["state"] in ("queued", "processing")}
         return name in live if name else bool(live)
 
-    def start(self, session, cfg, keep_text=False, output=None):
+    def start(self, session, cfg, keep_text=False, output=None, reuse_words=False):
         """output: "video", "document" or "both" (default: the output setting)."""
         name = session.name
         if self.active(name):
             return False
         self.state[name] = {"state": "queued", "message": "Waiting for the previous one to finish…"}
         output = output or cfg.output or "video"
-        threading.Thread(target=self._run, args=(session, cfg, keep_text, output), daemon=True).start()
+        threading.Thread(target=self._run, args=(session, cfg, keep_text, output, reuse_words), daemon=True).start()
         return True
 
-    def _run(self, session, cfg, keep_text, output):
+    def _run(self, session, cfg, keep_text, output, reuse_words=False):
         st = self.state[session.name]
         progress = lambda m: st.update(message=m)
         result = None
@@ -113,7 +113,8 @@ class Jobs:
                 result = {}
                 if output in ("video", "both"):
                     from .process import process_session
-                    result = process_session(session, cfg, progress=progress, keep_text=keep_text)
+                    result = process_session(session, cfg, progress=progress, keep_text=keep_text,
+                                             reuse_words=reuse_words)
                 if output in ("document", "both"):
                     from .document import make_guide
                     result.update(make_guide(session, cfg, progress=progress))
@@ -202,7 +203,10 @@ class Review:
                 "size_mb": num("size_mb"), "has_raw": (session / "raw.mkv").exists(),
                 "confirmed": bool(review.get("confirmed")), "can_rewrite": (session / "analysis.json").exists(),
                 "whatsapp_to": self.get_cfg().whatsapp_chat_name if self.get_cfg().whatsapp_chat_id else None,
-                "whatsapp_requested": review.get("whatsapp_requested")}
+                "whatsapp_requested": review.get("whatsapp_requested"),
+                "cuts": len(_read_json(session / "edits.json").get("cuts", [])),
+                "options": _read_json(session / "options.json"),
+                "can_edit": (session / "raw.mkv").exists() and (session / "analysis.json").exists()}
 
     def list(self):
         root = self.root()
@@ -218,12 +222,29 @@ class Review:
         return out
 
     def settings(self, body):
-        """Pick who writes documents: Claude (through Claude Code) or the local model."""
+        """Who writes documents (Claude through Claude Code, or the local model), and the WhatsApp group."""
+        cfg = config.load()
         if body.get("writer") in ("claude", "ollama"):
-            cfg = config.load()
             cfg["guide_writer"] = body["writer"]
-            config.save(cfg)
-        return claude_link.status(self.get_cfg())
+        if "whatsapp_chat_id" in body:
+            chat = str(body["whatsapp_chat_id"] or "").strip()
+            if chat and not re.fullmatch(r"[\w.-]+@(g|c)\.us", chat):
+                raise ValueError("That isn't a WhatsApp chat ID (it looks like 1203630000000000@g.us)")
+            cfg["whatsapp_chat_id"] = chat or None
+            cfg["whatsapp_chat_name"] = str(body.get("whatsapp_chat_name") or "").strip()[:80]
+        config.save(cfg)
+        return self.settings_info()
+
+    def settings_info(self):
+        cfg = self.get_cfg()
+        return dict(claude_link.status(cfg), whatsapp_chat_id=cfg.whatsapp_chat_id or "",
+                    whatsapp_chat_name=cfg.whatsapp_chat_name or "")
+
+    def _remake_cfg(self, session):
+        """Settings plus the options this video was last made with, so an edit keeps the same look."""
+        cfg = config.Config(self.get_cfg())
+        cfg.update({k: bool(v) for k, v in _read_json(session / "options.json").items() if k in REMAKE_KEYS})
+        return cfg
 
     def _mark(self, session, **kw):
         path = session / "review.json"
@@ -263,11 +284,37 @@ class Review:
         elif act == "remake":
             if not (session / "raw.mkv").exists():
                 raise RuntimeError("The original recording (raw.mkv) was not kept, so it can't be re-made")
-            cfg = config.Config(self.get_cfg())
+            cfg = self._remake_cfg(session)
             cfg.update({k: bool(v) for k, v in body.get("options", {}).items() if k in REMAKE_KEYS})
             (session / "error.txt").unlink(missing_ok=True)
             output = body.get("output") if body.get("output") in ("video", "document", "both") else "video"
             self.jobs.start(session, cfg, keep_text=not body.get("rewrite_text"), output=output)
+        elif act in ("edit", "edit-reset"):
+            # Cuts come in as times in the current video; they're kept in recording time (edits.json) so
+            # they line up with the original whatever the idle-cutting did, and survive later re-makes.
+            if self.jobs.active(session.name):
+                raise RuntimeError("Wait for the video to finish first")
+            if not (session / "raw.mkv").exists():
+                raise RuntimeError("The original recording (raw.mkv) was not kept, so the video can't be edited")
+            edits = session / "edits.json"
+            if act == "edit":
+                from .process import TimeMap
+                a = _read_json(session / "analysis.json")
+                if "segs" not in a:
+                    raise RuntimeError("Make the video once before editing it")
+                tm = TimeMap([tuple(s) for s in a["segs"]])
+                cuts = _read_json(edits).get("cuts", [])
+                for start, end in body.get("cuts", []):
+                    start, end = sorted((max(0.0, float(start)), min(tm.duration, float(end))))
+                    if end - start >= 0.05:
+                        cuts.append([round(tm.src(start), 3), round(tm.src(end), 3)])
+                if not cuts:
+                    raise RuntimeError("Mark a part to cut first")
+                edits.write_text(json.dumps({"cuts": sorted(cuts)}, indent=1), encoding="utf-8")
+            else:
+                edits.unlink(missing_ok=True)
+            (session / "error.txt").unlink(missing_ok=True)
+            self.jobs.start(session, self._remake_cfg(session), keep_text=True, output="video", reuse_words=True)
         elif act == "save-guide":
             (session / "guide" / "guide.md").write_text(body["md"], encoding="utf-8")
         elif act == "copy-guide":
@@ -359,7 +406,7 @@ class Review:
                         if method == "POST":
                             n = int(self.headers.get("Content-Length") or 0)
                             return self._json(review.settings(json.loads(self.rfile.read(n) or b"{}")))
-                        return self._json(claude_link.status(review.get_cfg()))
+                        return self._json(review.settings_info())
                     if parts[:2] == ["api", "rec"] and len(parts) >= 3:
                         session = review.session(parts[2])
                         if method == "GET" and len(parts) == 3:

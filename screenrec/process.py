@@ -90,7 +90,28 @@ def motion_profile(raw, fps=5):
     return out
 
 
-def keep_segments(duration, motion, words, ev, cfg, fps):
+def subtract(segs, cuts):
+    """segs minus the cut ranges (all in source time)."""
+    out = []
+    for s, e in segs:
+        pieces = [(s, e)]
+        for cs, ce in cuts:
+            pieces = [p for a, b in pieces for p in ((a, min(b, cs)), (max(a, ce), b)) if p[1] - p[0] > 1e-3]
+        out += pieces
+    return out
+
+
+def keep_segments(duration, motion, words, ev, cfg, fps, cuts=()):
+    q = lambda t: round(t * fps) / fps  # keep cuts on the frame grid so audio stays in sync
+    segs = _idle_segments(duration, motion, words, ev, cfg)
+    segs = [(q(s), q(e)) for s, e in subtract(segs, [(q(a), q(b)) for a, b in cuts])]
+    segs = [(s, e) for s, e in segs if e > s]
+    if not segs:
+        raise RuntimeError("The cuts leave nothing of the video. Undo the edits and try again.")
+    return segs
+
+
+def _idle_segments(duration, motion, words, ev, cfg):
     if not cfg.trim_idle:
         return [(0.0, duration)]
     active = [(t - 0.2, t + 0.2) for t, frac in motion if frac > 0.0015]  # > ~cursor-sized change
@@ -106,8 +127,7 @@ def keep_segments(duration, motion, words, ev, cfg, fps):
             merged[-1][1] = max(merged[-1][1], e)
         else:
             merged.append([s, e])
-    q = lambda t: round(t * fps) / fps  # keep cuts on the frame grid so audio stays in sync
-    return [(q(s), q(e)) for s, e in merged if q(e) > q(s)]
+    return [tuple(m) for m in merged]
 
 
 class TimeMap:
@@ -126,6 +146,13 @@ class TimeMap:
             if t <= e:
                 return off + t - s
         return self.duration
+
+    def src(self, t):
+        """Output time -> source time."""
+        for (s, e), off in zip(self.segs, self.offsets):
+            if t <= off + (e - s):
+                return s + max(0.0, t - off)
+        return self.segs[-1][1] if self.segs else t
 
     def kept(self, t):
         return any(s <= t < e for s, e in self.segs)
@@ -159,6 +186,24 @@ class Zoom:
                     cx, cy = cx + (nxt["x"] - prev["x"]) * k, cy + (nxt["y"] - prev["y"]) * k
                 return 1 + (self.level - 1) * env, cx, cy
         return 1.0, 0, 0
+
+
+def zoomed_clicks(clicks, ev):
+    """Left clicks made while zoom was on (the recording bar can switch it off for a while).
+    A recording made with zoom off throughout zooms every click when zoom is asked for afterwards."""
+    toggles = sorted(ev.get("zoom_toggles", []), key=lambda z: z["t"])
+    start = ev.get("zoom_start", True)
+    if not start and not any(z["on"] for z in toggles):
+        return clicks
+
+    def on(t):
+        state = start
+        for z in toggles:
+            if z["t"] > t:
+                break
+            state = z["on"]
+        return state
+    return [c for c in clicks if on(c["t"])]
 
 
 # ---------------- overlays ----------------
@@ -245,7 +290,8 @@ def render(raw, meta, ev, segs, captions, cfg, out_path, progress):
     rx, ry = ev["region"][0], ev["region"][1]
     clicks = [dict(c, x=c["x"] - rx, y=c["y"] - ry) for c in ev["clicks"]]
     clicks = [c for c in clicks if 0 <= c["x"] < W and 0 <= c["y"] < H]
-    zoom = Zoom([c for c in clicks if c["button"] == "left"], cfg.zoom if cfg.zoom_enabled else 1.0)
+    zoom = Zoom(zoomed_clicks([c for c in clicks if c["button"] == "left"], ev),
+                cfg.zoom if cfg.zoom_enabled else 1.0)
     labels = Labels(out_h)
     tm = TimeMap(segs)
 
@@ -342,13 +388,19 @@ def write_srt(captions, tm, path):
         ms = int(round(s * 1000))
         return f"{ms // 3600000:02}:{ms // 60000 % 60:02}:{ms // 1000 % 60:02},{ms % 1000:03}"
     lines = []
+    captions = [c for c in captions if tm.out(c["end"]) - tm.out(c["start"]) > 0.1]  # not cut out
     for i, c in enumerate(captions, 1):
         lines += [str(i), f"{ts(tm.out(c['start']))} --> {ts(tm.out(c['end']))}", c["text"], ""]
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def process_session(session: Path, cfg, progress=print, keep_text=False):
-    """keep_text: leave an existing whatsapp.txt alone (re-making the video after the text was edited)."""
+OPTION_KEYS = ("trim_idle", "zoom_enabled", "captions", "click_highlights", "key_overlay")
+
+
+def process_session(session: Path, cfg, progress=print, keep_text=False, reuse_words=False):
+    """keep_text: leave an existing whatsapp.txt alone (re-making the video after the text was edited).
+    reuse_words: take the transcript from the last run instead of transcribing again (editing cuts).
+    Cuts made in the video editor are kept in edits.json, in recording time, so re-makes keep them."""
     session = Path(session)
     raw = session / "raw.mkv"
     ev = json.loads((session / "events.json").read_text(encoding="utf-8-sig"))
@@ -362,12 +414,17 @@ def process_session(session: Path, cfg, progress=print, keep_text=False):
         _extract_audio(raw, meta, session / "speech16k.wav", 16000, fill_gaps=gaps)
         _extract_audio(raw, meta, session / "audio48k.wav", 48000,
                        ",highpass=f=80,lowpass=f=12000,dynaudnorm=f=150:g=15", fill_gaps=gaps)
-        if cfg.captions or cfg.trim_idle:
+        old = json.loads((session / "analysis.json").read_text(encoding="utf-8"))             if reuse_words and (session / "analysis.json").exists() else None
+        if old and old.get("words"):
+            words = old["words"]
+        elif cfg.captions or cfg.trim_idle:
             words = transcribe(session / "speech16k.wav", cfg, progress)
 
     progress("Finding the idle parts…")
     motion = motion_profile(raw)
-    segs = keep_segments(meta["duration"], motion, words, ev, cfg, fps)
+    edits = session / "edits.json"
+    cuts = json.loads(edits.read_text(encoding="utf-8")).get("cuts", []) if edits.exists() else []
+    segs = keep_segments(meta["duration"], motion, words, ev, cfg, fps, cuts)
     tm = TimeMap(segs)
     captions = caption_chunks(words) if cfg.captions else []
 
@@ -391,6 +448,7 @@ def process_session(session: Path, cfg, progress=print, keep_text=False):
         srt.unlink(missing_ok=True)
     # Kept so the review window can rewrite the message without redoing the whole video.
     (session / "analysis.json").write_text(json.dumps({"words": words, "segs": segs}), encoding="utf-8")
+    (session / "options.json").write_text(json.dumps({k: bool(cfg[k]) for k in OPTION_KEYS}), encoding="utf-8")
 
     text_path = session / "whatsapp.txt"
     if not (keep_text and text_path.exists()):
