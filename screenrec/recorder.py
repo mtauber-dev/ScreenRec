@@ -41,7 +41,11 @@ class Recorder:
         self.stop_flag = threading.Event()
         self.url_poke = threading.Event()
         self.click_q = queue.Queue()
-        self.ignore_label = hotkey_label(cfg.hotkey)
+        self.ignore_labels = {hotkey_label(cfg.hotkey), hotkey_label(cfg.zoom_hotkey or "<ctrl>+<alt>+z")}
+        self.ignore_rects = []  # screen areas (the control bar) whose clicks aren't part of the how-to
+        # Zoom on clicks can be switched off and on while recording; the video only zooms where it was on.
+        self.zoom_on = self.zoom_start = bool(cfg.zoom_enabled)
+        self.zoom_toggles = []
         self.has_audio = False
         self.encoder = self.mic = self.proc = None
         self.t0 = None
@@ -177,9 +181,20 @@ class Recorder:
                 p.unlink(missing_ok=True)
             with self.lock:
                 self.clicks, self.keys, self.windows = [], [], []
+            self.zoom_start, self.zoom_toggles = self.zoom_on, []
             self.segments, self.offset = [], 0.0
             self._start_segment()
             self.paused = False
+
+    def toggle_zoom(self):
+        """Switch zoom on clicks off or on from this moment on. Returns the new state."""
+        with self.lock:
+            self.zoom_on = not self.zoom_on
+            self.zoom_toggles.append({"t": round(self.elapsed(), 3), "on": self.zoom_on})
+        return self.zoom_on
+
+    def zoom_used(self):
+        return self.zoom_start or any(z["on"] for z in self.zoom_toggles)
 
     def elapsed(self):
         running = self.proc and not self.paused and self.t0
@@ -200,6 +215,7 @@ class Recorder:
         self._join()
         data = {"region": self.region, "has_audio": self.has_audio, "encoder": self.encoder,
                 "segments": len(self.segments),
+                "zoom_start": self.zoom_start, "zoom_toggles": self.zoom_toggles,
                 "clicks": self.clicks, "keys": self.keys, "windows": self.windows}
         (self.dir / "events.json").write_text(json.dumps(data, indent=1), encoding="utf-8")
         return self.dir
@@ -210,6 +226,8 @@ class Recorder:
 
     def _on_click(self, x, y, button, pressed):
         if pressed and not self.paused and button in (mouse.Button.left, mouse.Button.right):
+            if any(rx <= x < rx + rw and ry <= y < ry + rh for rx, ry, rw, rh in self.ignore_rects):
+                return
             click = {"t": self._now(), "x": x, "y": y, "button": button.name}
             with self.lock:
                 self.clicks.append(click)
@@ -236,7 +254,7 @@ class Recorder:
             label = " + ".join(mods + [name])
         else:
             return
-        if label != self.ignore_label:
+        if label not in self.ignore_labels:
             with self.lock:
                 self.keys.append({"t": self._now(), "label": label})
             if name in ("Enter", "F5") or label in ("Ctrl + L", "Ctrl + T", "Ctrl + W", "Ctrl + Tab"):

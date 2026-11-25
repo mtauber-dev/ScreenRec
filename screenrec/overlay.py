@@ -12,7 +12,7 @@ from concurrent.futures import Future
 from . import winutil
 
 BG, FG, HOVER, MUTED = "#1f1f1f", "#ffffff", "#3a3a3a", "#9a9a9a"
-RED, AMBER = "#ff3b30", "#ffb300"
+RED, AMBER, GREEN = "#ff3b30", "#ffb300", "#4cd964"
 FRAME_W = 3
 
 
@@ -64,7 +64,8 @@ def _prepare(win, click_through=False):
 
 
 class RecordingOverlay:
-    """actions: dict of callables 'pause', 'resume', 'restart', 'stop' (run off the Tk thread)."""
+    """actions: dict of callables 'pause', 'resume', 'restart', 'stop' (run off the Tk thread) and
+    'zoom' (switches zoom on clicks off/on; quick, so it runs right away)."""
 
     def __init__(self, root, rec, area, actions):
         self.root, self.rec, self.actions = root, rec, actions
@@ -112,6 +113,7 @@ class RecordingOverlay:
         self.clock.pack(side="left")
         self.pause_btn = self._button(bar, "❚❚  Pause", self._toggle_pause)
         self.restart_btn = self._button(bar, "↺  Restart", self._restart)
+        self.zoom_btn = self._button(bar, "", lambda: self.actions["zoom"]())
         self._button(bar, "■  Finish", lambda: self._run("stop"), fg=RED)
         for wdg in (grip, self.clock, self.dot):
             wdg.bind("<ButtonPress-1>", self._drag_start)
@@ -131,6 +133,11 @@ class RecordingOverlay:
         bx = min(max(x + (w - bw) // 2, mx + 8), mx + mw - bw - 8)
         bar.geometry(f"+{bx}+{by}")
         _prepare(bar)
+        self._note_bar(bx, by)
+
+    def _note_bar(self, x, y):
+        """Clicks on the bar aren't part of the how-to: no click circle, no zoom."""
+        self.rec.ignore_rects = [(x, y, self.bar.winfo_reqwidth(), self.bar.winfo_reqheight())]
 
     def _button(self, parent, text, cmd, fg=FG):
         b = tk.Label(parent, text=text, bg=BG, fg=fg, font=("Segoe UI", 10), padx=10, pady=7, cursor="hand2")
@@ -146,6 +153,7 @@ class RecordingOverlay:
     def _drag(self, e):
         ox, oy = self._drag_off
         self.bar.geometry(f"+{e.x_root - ox}+{e.y_root - oy}")
+        self._note_bar(e.x_root - ox, e.y_root - oy)
 
     # ---------- actions ----------
     def _run(self, name):
@@ -184,6 +192,8 @@ class RecordingOverlay:
         blink = paused and int(time.monotonic() * 2) % 2
         self.dot.config(fg=AMBER if paused else RED, text="" if blink else "●")
         self.pause_btn.config(text="▶  Resume" if paused else "❚❚  Pause")
+        on = self.rec.zoom_on
+        self.zoom_btn.config(text="🔍  Zoom on" if on else "🔍  Zoom off", fg=GREEN if on else AMBER)
         if self.confirm_restart and time.monotonic() - self.confirm_restart >= 3:
             self.confirm_restart = None
         if not self.confirm_restart:

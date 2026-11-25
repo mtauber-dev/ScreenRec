@@ -24,7 +24,8 @@ DEFAULTS = {
     "trim_idle": True,
     "min_idle_gap": 1.5,                 # idle stretches longer than this (s) get cut
     "idle_pad": 0.5,                     # seconds kept either side of activity
-    "zoom_enabled": True,
+    "zoom_enabled": True,                # default for new recordings; the recording bar can switch it off
+    "zoom_hotkey": "<ctrl>+<alt>+z",     # while recording: zoom on clicks off / back on
     "zoom": 1.5,
     "click_highlights": True,
     "key_overlay": True,                 # shows shortcuts / Enter / Esc only, never typed text

@@ -16,8 +16,12 @@ Everything runs on your PC. Writing the document can optionally use Claude (see 
   The tray menu also has **Record an area…**.
 - While recording, a floating bar has **Pause / Resume**, **Restart** and **Finish**. A recorded area
   gets a red frame around it. Neither the bar nor the frame shows up in the recording.
-- When you stop, the **review window** opens: watch the video, edit the WhatsApp message, read and
-  edit the document, re-make either with different options, and copy them out.
+- The bar also shows **🔍 Zoom on / Zoom off**: click it (or press **Ctrl+Alt+Z**) to stop zooming in on
+  clicks for a while, and again to turn it back on. The tray menu's **Zoom on clicks** sets the default.
+- When you stop, the **review window** opens: watch the video, cut out parts of it (**✂ Edit**), edit
+  the WhatsApp message, read and edit the document, re-make either with different options, and copy
+  them out. Cuts are kept when you re-make the video, and **Undo all edits** puts them back.
+- To send videos straight to a WhatsApp group, set the group in the review window's **Settings**.
 - Tray menu → **After recording, make** → *Video*, *Document* or *Video and document*.
 
 ## Install
